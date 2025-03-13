@@ -6,6 +6,13 @@ import sys
 import re
 from datetime import datetime
 
+currency_symbols = {
+    '$': 'USD',
+    '₸': 'KZT',
+    '£': 'GBP',
+    '€': 'EUR',
+    '₽': 'RUR'
+}
 
 # 1. Подключение к MySQL
 def connect_to_mysql():
@@ -37,15 +44,15 @@ def insert_into_mysql(connection, table_name, data_frame):
             datetime_value = datetime.strptime(row['Время'], '%d.%m.%Y %H:%M:%S') if pd.notnull(row['Время']) else None
             ticker = row['Тикер'] if pd.notnull(row['Тикер']) else None
             deal_type = 'buy' if row['Операция'].strip() == 'покупка' else 'sell' if row['Операция'].strip() == 'продажа' else None
-
-            # Проверяем тип данных перед обработкой
             price = float(row['Цена']) if isinstance(row['Цена'], (int, float)) else float(row['Цена'].replace(',', '.')) if pd.notnull(row['Цена']) else None
             qty = int(row['Количество']) if pd.notnull(row['Количество']) else None
             amount = float(row['Сумма']) if isinstance(row['Сумма'], (int, float)) else float(row['Сумма'].replace(',', '.')) if pd.notnull(row['Сумма']) else None
-            #comission = float(row['Комиссия']) if isinstance(row['Комиссия'], (int, float)) else float(row['Комиссия'].replace('$', '').replace(',', '.')) if pd.notnull(row['Комиссия']) else None
             comission = (float(row['Комиссия']) if isinstance(row['Комиссия'], (int, float)) else float(re.sub(r'[^\d.,]', '', row['Комиссия']).replace(',', '.')) if pd.notnull(row['Комиссия']) else None)
-            #profit = float(row['Прибыль']) if isinstance(row['Прибыль'], (int, float)) else float(row['Прибыль'].replace('$', '').replace(',', '.')) if pd.notnull(row['Прибыль']) else None
+            if pd.notnull(row['Комиссия']):
+                comission_currency = next((currency_symbols[symbol] for symbol in currency_symbols if symbol in str(row['Комиссия'])), '???')
             profit = (float(row['Прибыль']) if isinstance(row['Прибыль'], (int, float)) else float(re.sub(r'[^\d.,]', '', row['Прибыль']).replace(',', '.')) if pd.notnull(row['Прибыль']) else None)
+           if pd.notnull(row['Прибыль']):
+                profit_currency = next((currency_symbols[symbol] for symbol in currency_symbols if symbol in str(row['Прибыль'])), '?') 
             
             # SQL для вставки данных
             sql = f"""
@@ -59,8 +66,10 @@ def insert_into_mysql(connection, table_name, data_frame):
                     qty,
                     amount,
                     comission,
-                    profit
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    comission_currency,
+                    profit,
+                    profit_currency
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             values = (
                 deal_number,
@@ -72,7 +81,9 @@ def insert_into_mysql(connection, table_name, data_frame):
                 qty,
                 amount,
                 comission,
-                profit
+                comission_currency,
+                profit,
+                profit_currency
             )
 
             # Отладочный вывод
