@@ -1,8 +1,10 @@
 import os
 from dotenv import load_dotenv
 
-# Загружаем переменные из файла .env
-load_dotenv()
+# Загружаем переменные из файла .env.dacha_info
+dotenv_path = "/Users/dlm_air/Documents/GitHub/DLM_repository/invest_loaders/.env.dacha_info"  # Путь к файлу с переменными окружения
+load_dotenv(dotenv_path=dotenv_path)  # Загружаем переменные из указанного файла
+
 
 # Читаем переменные
 DB_HOST = os.getenv("DB_HOST")
