@@ -38,9 +38,12 @@ def read_excel(file_path):
 def insert_into_mysql(connection, table_name, data_frame):
     # Удаляем лишние пробелы в заголовках
     data_frame.columns = data_frame.columns.str.strip()
-    # print(data_frame.columns)
 
     cursor = connection.cursor()
+
+    # Счётчики
+    total_rows = len(data_frame)  # Общее количество строк в DataFrame
+    inserted_rows = 0  # Счётчик успешно добавленных строк
 
     for index, row in data_frame.iterrows():
         try:
@@ -49,11 +52,9 @@ def insert_into_mysql(connection, table_name, data_frame):
             operation = row['Операция'].strip() if pd.notnull(row['Операция']) else None
             ticker = row['Тикер'].strip() if pd.notnull(row['Тикер']) else None
 
-            # Обработка числовых полей с проверкой на тип
             price = float(row['Цена']) if isinstance(row['Цена'], (int, float)) else float(row['Цена'].replace(' ', '').replace(',', '.')) if pd.notnull(row['Цена']) else None
             qty = int(row['Количество']) if pd.notnull(row['Количество']) else None
 
-            # Обработка "Сумма"
             amount = None
             if pd.notnull(row['Сумма']):
                 amount = (
@@ -122,12 +123,21 @@ def insert_into_mysql(connection, table_name, data_frame):
             # Выполнение запроса
             cursor.execute(sql, values)
 
+            # Увеличиваем счётчик, если строка была добавлена
+            if cursor.rowcount > 0:
+                inserted_rows += 1
+
         except Exception as e:
             print(f"Ошибка при обработке строки {index + 1}: {e}")
 
     # Фиксируем изменения
     connection.commit()
     cursor.close()
+
+    # Итоговый вывод
+    print(f"Общее количество строк в DataFrame: {total_rows}")
+    print(f"Успешно добавлено строк в базу данных: {inserted_rows}")
+    print(f"Проигнорировано строк (возможно, дубликаты): {total_rows - inserted_rows}")
 
 # 4. Основная программа
 def main():
@@ -159,7 +169,7 @@ def main():
 
         # Добавляем данные в MySQL
         insert_into_mysql(connection, table_name, df)
-        print("Данные успешно добавлены в MySQL!")
+
     finally:
         # Закрываем соединение с MySQL
         connection.close()

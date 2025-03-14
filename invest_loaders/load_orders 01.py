@@ -5,19 +5,10 @@ from dotenv import load_dotenv
 import pandas as pd
 import mysql.connector
 import sys
-import re
 from datetime import datetime
 
-currency_symbols = {
-    '$': 'USD',
-    '₸': 'KZT',
-    '£': 'GBP',
-    '€': 'EUR',
-    '₽': 'RUR'
-}
 
 # 1. Подключение к MySQL
-
 # Загружаем переменные из файла .env.dacha_info
 dotenv_path = "/Users/dlm_air/Documents/GitHub/DLM_repository/invest_loaders/.env.dacha_info"  # Путь к файлу с переменными окружения
 load_dotenv(dotenv_path=dotenv_path)  # Загружаем переменные из указанного файла
@@ -42,80 +33,101 @@ def read_excel(file_path):
     df = pd.read_excel(file_path)
     return df
 
+
 # 3. Добавление данных в MySQL с преобразованием
 def insert_into_mysql(connection, table_name, data_frame):
+    # Удаляем лишние пробелы в заголовках
+    data_frame.columns = data_frame.columns.str.strip()
+    # print(data_frame.columns)
+
     cursor = connection.cursor()
-    total_rows = len(data_frame)  # Общее количество строк в DataFrame
-    inserted_rows = 0  # Счётчик успешно добавленных строк
 
     for index, row in data_frame.iterrows():
         try:
             # Преобразование данных
-            deal_number = int(row['№ сделки']) if pd.notnull(row['№ сделки']) else None
-            order_number = int(row['№ приказа']) if pd.notnull(row['№ приказа']) else None
-            datetime_value = datetime.strptime(row['Время'], '%d.%m.%Y %H:%M:%S') if pd.notnull(row['Время']) else None
-            ticker = row['Тикер'] if pd.notnull(row['Тикер']) else None
-            deal_type = 'buy' if row['Операция'].strip() == 'покупка' else 'sell' if row['Операция'].strip() == 'продажа' else None
-            price = float(row['Цена']) if isinstance(row['Цена'], (int, float)) else float(row['Цена'].replace(',', '.')) if pd.notnull(row['Цена']) else None
+            status = row['Статус'].strip() if pd.notnull(row['Статус']) else None
+            operation = row['Операция'].strip() if pd.notnull(row['Операция']) else None
+            ticker = row['Тикер'].strip() if pd.notnull(row['Тикер']) else None
+
+            # Обработка числовых полей с проверкой на тип
+            price = float(row['Цена']) if isinstance(row['Цена'], (int, float)) else float(row['Цена'].replace(' ', '').replace(',', '.')) if pd.notnull(row['Цена']) else None
             qty = int(row['Количество']) if pd.notnull(row['Количество']) else None
-            amount = float(row['Сумма']) if isinstance(row['Сумма'], (int, float)) else float(row['Сумма'].replace(',', '.')) if pd.notnull(row['Сумма']) else None
-            comission = (float(row['Комиссия']) if isinstance(row['Комиссия'], (int, float)) else float(re.sub(r'[^\d.,]', '', row['Комиссия']).replace(',', '.')) if pd.notnull(row['Комиссия']) else None)
-            if pd.notnull(row['Комиссия']):
-                comission_currency = next((currency_symbols[symbol] for symbol in currency_symbols if symbol in str(row['Комиссия'])), '???')
-            profit = (float(row['Прибыль']) if isinstance(row['Прибыль'], (int, float)) else float(re.sub(r'[^\d.,]', '', row['Прибыль']).replace(',', '.')) if pd.notnull(row['Прибыль']) else None)
-            if pd.notnull(row['Прибыль']):
-                profit_currency = next((currency_symbols[symbol] for symbol in currency_symbols if symbol in str(row['Прибыль'])), '?') 
-            
+
+            # Обработка "Сумма"
+            amount = None
+            if pd.notnull(row['Сумма']):
+                amount = (
+                    float(row['Сумма']) if isinstance(row['Сумма'], (int, float))
+                    else float(row['Сумма'].replace(' ', '').replace('$', '').replace('~', '').replace(',', '.').strip())
+                    if 'данных' not in row['Сумма'].lower()
+                    else None
+                )
+
+            qty_remaining = int(row['Остаток']) if pd.notnull(row['Остаток']) else None
+            order_type = row['Тип приказа'].strip() if pd.notnull(row['Тип приказа']) else None
+
+            order_condition = None
+            if pd.notnull(row['Условие']):
+                order_condition = (
+                    float(row['Условие']) if isinstance(row['Условие'], (int, float))
+                    else float(row['Условие'].replace(' ', '').replace(',', '.'))
+                    if row['Условие'] != '-'
+                    else None
+                )
+
+            expiry = row['Срок'].strip() if pd.notnull(row['Срок']) else None
+
+            order_date = datetime.strptime(row['Время'], '%Y-%m-%d %H:%M:%S') if pd.notnull(row['Время']) else None
+            order_number = (
+                int(row['№  приказа'])
+                if isinstance(row['№  приказа'], (int, float))
+                else int(row['№  приказа'].replace(' ', ''))
+                if pd.notnull(row['№  приказа'])
+                else None
+            )
+
             # SQL для вставки данных
             sql = f"""
                 INSERT IGNORE INTO {table_name} (
-                    deal_number,
-                    order_number,
-                    datetime,
+                    status,
+                    operation,
                     ticker,
-                    deal_type,
                     price,
                     qty,
                     amount,
-                    comission,
-                    comission_currency,
-                    profit,
-                    profit_currency
+                    qty_remaining,
+                    order_type,
+                    order_condition,
+                    expiry,
+                    order_date,
+                    order_number
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
+
             values = (
-                deal_number,
-                order_number,
-                datetime_value,
+                status,
+                operation,
                 ticker,
-                deal_type,
                 price,
                 qty,
                 amount,
-                comission,
-                comission_currency,
-                profit,
-                profit_currency
+                qty_remaining,
+                order_type,
+                order_condition,
+                expiry,
+                order_date,
+                order_number
             )
 
-            # Выполняем запрос
+            # Выполнение запроса
             cursor.execute(sql, values)
 
-            # Увеличиваем счётчик, если строка была добавлена
-            if cursor.rowcount > 0:
-                inserted_rows += 1
-        
         except Exception as e:
             print(f"Ошибка при обработке строки {index + 1}: {e}")
 
     # Фиксируем изменения
     connection.commit()
     cursor.close()
-
-    # Итоговый вывод
-    print(f"Общее количество строк в DataFrame: {total_rows}")
-    print(f"Успешно добавлено строк в базу данных: {inserted_rows}")
-    print(f"Проигнорировано строк (возможно, дубликаты): {total_rows - inserted_rows}")
 
 # 4. Основная программа
 def main():
@@ -130,7 +142,7 @@ def main():
     print(f"Обработан файл: {file_path}")
 
     # Имя таблицы в MySQL
-    table_name = "invest.deals"
+    table_name = "invest.orders"
 
     # Подключаемся к MySQL
     connection = connect_to_mysql()
@@ -147,7 +159,7 @@ def main():
 
         # Добавляем данные в MySQL
         insert_into_mysql(connection, table_name, df)
-
+        print("Данные успешно добавлены в MySQL!")
     finally:
         # Закрываем соединение с MySQL
         connection.close()
