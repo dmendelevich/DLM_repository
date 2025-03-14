@@ -1,5 +1,7 @@
-#!/usr/local/bin/python3
+# Загрузка данных о сделках в MySQL
 
+import os
+from dotenv import load_dotenv
 import pandas as pd
 import mysql.connector
 import sys
@@ -7,15 +9,22 @@ from datetime import datetime
 
 
 # 1. Подключение к MySQL
+# Загружаем переменные из файла .env
+load_dotenv()
+# Читаем переменные
+DB_HOST = os.getenv("DB_HOST")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_NAME = os.getenv("DB_NAME")
+
 def connect_to_mysql():
     connection = mysql.connector.connect(
-        host="89.104.117.98",
-        user="root_user",
-        password="#DdLlMm24680",
-        database="dacha_info"
+        host=DB_HOST,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        database=DB_NAME
     )
     return connection
-
 
 # 2. Чтение данных из Excel
 def read_excel(file_path):
