@@ -7,6 +7,7 @@ import mysql.connector
 import sys
 import re
 from datetime import datetime
+import subprocess
 
 currency_symbols = {
     '$': 'USD',
@@ -42,7 +43,19 @@ def read_excel(file_path):
     df = pd.read_excel(file_path)
     return df
 
-# 3. Добавление данных в MySQL с преобразованием
+# 3.1. Добавление записи в таблицу exchange_rates
+def insert_into_exchange_rates(connection, datetime_value):
+    cursor = connection.cursor()
+
+    sql = """
+    INSERT IGNORE INTO currency.exchange_rates (rate_date)
+    VALUES (%s)
+    """
+    cursor.execute(sql, (datetime_value.date(),))
+    connection.commit()
+    cursor.close()
+
+# 3.2. Добавление данных в MySQL с преобразованием
 def insert_into_mysql(connection, table_name, data_frame):
     cursor = connection.cursor()
     total_rows = len(data_frame)  # Общее количество строк в DataFrame
@@ -104,7 +117,11 @@ def insert_into_mysql(connection, table_name, data_frame):
             # Увеличиваем счётчик, если строка была добавлена
             if cursor.rowcount > 0:
                 inserted_rows += 1
-        
+
+            # Вставка даты в таблицу exchange_rates
+            if datetime_value:
+                insert_into_exchange_rates(connection, datetime_value)
+            
         except Exception as e:
             print(f"Ошибка при обработке строки {index + 1}: {e}")
 
@@ -151,6 +168,16 @@ def main():
     finally:
         # Закрываем соединение с MySQL
         connection.close()
+
+    # Вызов empty_rates.py
+    print("Запускаем empty_rates.py...")
+    result = subprocess.run(["/Library/Frameworks/Python.framework/Versions/3.13/bin/python3", "/Users/dlm_air/Documents/GitHub/DLM_repository/invest_loaders/empty_rates.py"], capture_output=True, text=True)
+
+    # Выводим результат выполнения empty_rates.py
+    print("Результат выполнения empty_rates.py:")
+    print(result.stdout)
+    print(result.stderr)
+
 
 
 if __name__ == "__main__":
